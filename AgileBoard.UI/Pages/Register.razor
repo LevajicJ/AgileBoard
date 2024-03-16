@@ -1,0 +1,84 @@
+﻿@page "/register"
+@using AgileBoard.Application.DTOs;
+@using AgileBoard.UI.Services;
+@inject IUserService userService;
+@inject NavigationManager NavigationManager
+@inject ILocalStorageService LocalStorage
+@inject AuthenticationStateProvider AuthStateProvider;
+@attribute [Authorize];
+@inject ISyncLocalStorageService storage;
+
+@if (IsAdmin())
+{
+    <h3 style="text-align:center">Register</h3>
+    <div style="display:flex; justify-content:center; align-items:center">
+        <EditForm Model="user" OnSubmit="HandleRegister">
+            <div class="form-group text-center">
+                <label for="fullName">Full name</label>
+                <InputText id="fullname" @bind-Value="user.FullName" class="form-control" />
+            </div>
+            <div class="form-group text-center">
+                <label for="email">Email</label>
+                <InputText id="email" @bind-Value="user.Email" class="form-control" />
+            </div>
+            <div class="form-group text-center">
+                <label for="password">Password</label>
+                <InputText id="password" @bind-Value="user.Password" type="password" class="form-control" />
+            </div>
+            <div id="errorMessage" style="display: @(string.IsNullOrEmpty(message))">
+                <p class="text-danger text-center">@message</p>
+            </div>
+            <div class="form-group text-center">
+                <button type="submit" class="btn btn-primary">Register</button>
+            </div>
+        </EditForm>
+    </div>
+}
+else
+{
+    <p style="text-align: center; font-size:50px; padding: 100px;">
+        You are not allowed to access this page.
+    </p>
+}
+
+
+
+@code {
+    private UserDto user = new UserDto();
+    private string message = "";
+
+    private async Task HandleRegister()
+    {
+        message = "Loading..";
+        var registerUser = new UserRegisterDTO
+            {
+                UserName = user.FullName,
+                Email = user.Email,
+                Password = user.Password
+            };
+
+        var result = await userService.Register(registerUser);
+
+        if(result == false)
+        {
+            message = "Registration failed";
+        }
+        else
+        {
+            message = "Registration successful!";
+            NavigationManager.NavigateTo("/users");
+        }
+
+    }
+
+    private bool IsAdmin()
+    {
+        var admin = storage.GetItem<string>("email");
+        if (admin == "admin@agileboard.com")
+            return true;
+
+        return false;
+
+    }
+
+}

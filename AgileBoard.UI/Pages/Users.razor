@@ -1,0 +1,70 @@
+﻿@page "/users"
+@using AgileBoard.Domain.Models;
+@using AgileBoard.UI.Services;
+@attribute [Authorize]
+@inject IUserService UserService;
+@inject ISyncLocalStorageService LocalStorage;
+@inject IJSRuntime JSRuntime;
+
+@if(users == null)
+{
+    <h3>Loading...</h3>
+}
+else
+{
+    <h3>Users</h3>
+    @if (admin == "admin@agileboard.com")
+    {
+        <button class="btn btn-outline-primary" onclick="location.href='/register'"> Register user </button>
+    }
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in users)
+            {
+                <tr>
+                    <td>@user.UserName</td>
+                    <td>@user.Email</td>
+                    @if (admin == "admin@agileboard.com")
+                    {
+                        <td>
+                            <button class="btn btn-outline-primary" @onclick="() => DeleteUser(user.Id)">Delete user</button>
+                        </td>
+                    }
+
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+
+@code {
+
+    private IEnumerable<User> users { get; set; }
+    private string admin = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        admin = LocalStorage.GetItem<string>("email");
+        users = await UserService.GetAllUsers();
+    }
+
+    private async void DeleteUser(int userId)
+    {
+        bool delete = await JSRuntime.InvokeAsync<bool>("confirm", new object[] { "Are you sure you want to delete user?" });
+
+        if (delete)
+        {
+            await UserService.DeleteUser(userId);
+            await JSRuntime.InvokeVoidAsync("location.reload");
+        }
+    }
+
+}

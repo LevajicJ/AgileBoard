@@ -1,0 +1,95 @@
+﻿@inject NavigationManager NavigationManager
+@inject ISyncLocalStorageService storage;
+@inject ILocalStorageService LocalStorage;
+@inject AuthenticationStateProvider AuthStateProvider
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">AgileBoard</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+<AuthorizeView>
+    <Authorized>
+        <div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+            <nav class="flex-column">
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" >
+                        <span aria-hidden="true"></span> @storage.GetItemAsString("email")
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="boards">
+                        <span class="oi oi-clipboard" aria-hidden="true"></span> Boards
+                    </NavLink>
+                </div>
+                @if (IsAdmin())
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="users">
+                            <span class="oi oi-person" aria-hidden="true"></span> Users
+                        </NavLink>
+                    </div>
+                }
+                
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" @onclick="LogOut">
+                        <span class="oi oi-account-login" aria-hidden="true"></span> Logout
+                    </NavLink>
+                </div>
+            </nav>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <nav class="flex-column">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="login">
+                    <span class="oi oi-account-login" aria-hidden="true"></span> Login
+                </NavLink>
+            </div>
+        </nav>
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+
+    }
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    void Login()
+    {
+        NavigationManager.NavigateTo("login");
+    }
+
+    private async Task LogOut()
+    {
+        await LocalStorage.RemoveItemAsync("token");
+        await LocalStorage.RemoveItemAsync("email");
+        await AuthStateProvider.GetAuthenticationStateAsync();
+        NavigationManager.NavigateTo("login");
+    }
+
+    private bool IsAdmin()
+    {
+        var admin = storage.GetItem<string>("email");
+        if (admin == "admin@agileboard.com" || admin == "manager@agileboard.com")
+            return true;
+
+        return false;
+
+    }
+}

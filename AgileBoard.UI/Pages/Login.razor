@@ -1,0 +1,62 @@
+﻿@page "/"
+@page "/login"
+@using AgileBoard.Application.DTOs;
+@using AgileBoard.UI.Services;
+@inject IUserService userService;
+@inject NavigationManager NavigationManager
+@inject ILocalStorageService LocalStorage
+@inject AuthenticationStateProvider AuthStateProvider
+
+<h3 style="text-align:center">Login</h3>
+<div style="display:flex; justify-content:center; align-items:center">
+    <EditForm Model="user" OnSubmit="HandleLogin" >
+        <div class="form-group text-center">
+            <label for="email">Email</label>
+            <InputText id="email" @bind-Value="user.Email" class="form-control"/>
+        </div>
+        <div class="form-group text-center">
+            <label for="password">Password</label>
+            <InputText id="password" @bind-Value="user.Password" type="password" class="form-control" />
+        </div>
+        <div id="errorMessage" style="display: @(string.IsNullOrEmpty(errorMessage))">
+            <p class="text-danger text-center">@errorMessage</p>
+        </div>
+        <div class="form-group text-center">
+            <button type="submit" class="btn btn-primary">Login</button>
+        </div>
+    </EditForm>
+</div>
+
+
+@code {
+    private UserDto user = new UserDto();
+    private string errorMessage = "";
+
+    private async Task HandleLogin()
+    {
+        errorMessage = "Loading..";
+        var loginUser = new UserLoginDTO
+        {
+            Email = user.Email,
+            Password = user.Password
+        };
+
+        var token = await userService.Login(loginUser);
+
+        if (string.IsNullOrEmpty(token))
+        {
+            errorMessage = "Invalid email or password";
+        }
+        else
+        {
+            await LocalStorage.SetItemAsync("token", token);
+            await LocalStorage.SetItemAsync<string>("email", user.Email);
+
+            await AuthStateProvider.GetAuthenticationStateAsync();
+            
+            NavigationManager.NavigateTo("/Boards");
+        }
+
+        
+    }
+}

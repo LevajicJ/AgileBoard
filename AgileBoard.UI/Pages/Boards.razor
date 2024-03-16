@@ -1,0 +1,142 @@
+﻿@page "/boards"
+@attribute [Authorize]
+@using AgileBoard.Domain.Models;
+@using AgileBoard.UI.Services;
+@inject IBoardService BoardService;
+@inject IUserService UserService;
+@inject AuthenticationStateProvider AuthStateProvider;
+@inject ISyncLocalStorageService LocalStorage;
+@inject NavigationManager NavigationManager;
+@inject IJSRuntime JSRuntime;
+
+<h3>Boards</h3>
+
+@if(boards == null || adminBoards == null)
+{
+    <h3>Loading...</h3>
+}
+else{
+    @if(userProfile == "manager@agileboard.com")
+    {
+        <button class="btn btn-outline-primary" @onclick="() => CreateBoard()"> Create board </button>
+    }
+    
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Board</th>
+                <th></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if(userProfile == "admin@agileboard.com")
+            {
+                @foreach (var board in adminBoards)
+                {
+                    <tr>
+                        <td>@board.Name</td>
+
+                        <td>
+                            <button class="btn btn-outline-primary" onclick="location.href='/Board/@board.Id'">Show board</button>
+                        </td>
+                        <td>
+                        </td>
+                    </tr>
+                }
+            }
+            else
+            {
+                @foreach (var board in boards)
+                {
+                    <tr>
+                        <td>@board.Board.Name</td>
+
+                        <td>
+                            <button class="btn btn-outline-primary" onclick="location.href='/Board/@board.BoardId'">Show board</button>
+                        </td>
+                        <td>
+                            @if (userProfile == "manager@agileboard.com")
+                            {
+                                <button class="btn btn-outline-primary" @onclick="() => DeleteBoard(board.BoardId)">Delete board</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+            
+        </tbody>
+    </table>
+}
+@if (CreateBoardOverlay)
+{
+    <div class="overlay">
+        <div class="task-detail" >
+            <input type="text" @bind="newBoardName" placeholder="Enter board name"></input>
+            <br/>
+            <br/>
+            <button class="btn btn-outline-primary" @onclick="() => AddBoard(newBoardName, userId)">Create board</button>
+            <button class="btn btn-outline-primary" @onclick="() => Close()">Close</button>
+        </div>
+    </div>
+}
+
+
+@code {
+
+    List<BoardUser> boards { get; set; }
+    List<AgileBoard.Domain.Models.Board> adminBoards { get; set; }
+    private bool CreateBoardOverlay { get; set; }
+    private string newBoardName { get; set; }
+    public int userId;
+    private string userProfile = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        //get email from local storage
+        userProfile = LocalStorage.GetItem<string>("email");
+        var email = LocalStorage.GetItemAsString("email");
+        var emailValue = email.Substring(1, email.Length - 2);
+        userId = await UserService.GetUserByEmail(emailValue);
+        
+        adminBoards = await BoardService.GetAllBoards();
+
+        boards = await BoardService.GetBoardsForUser(userId);
+    }
+
+    private void CreateBoard()
+    {
+        CreateBoardOverlay = true;
+    }
+
+    private async void AddBoard(string boardName, int userId)
+    {
+        CreateBoardOverlay = false;
+        newBoardName = string.Empty;
+        var newBoard = new CreateBoardDto
+            {
+                BoardName = boardName,
+                BoardOwner = userId
+            };
+        await BoardService.CreateBoard(newBoard);
+        NavigationManager.NavigateTo("boards", true);
+    }
+
+    private void Close()
+    {
+        CreateBoardOverlay = false;
+    }
+
+    private async void DeleteBoard(int boardId)
+    {
+        bool delete = await JSRuntime.InvokeAsync<bool>("confirm", new object[] { "Are you sure you want to delete board?" });
+
+        if (delete)
+        {
+            await BoardService.DeleteBoard(boardId);
+            await JSRuntime.InvokeVoidAsync("location.reload");
+        }
+    }
+
+
+}

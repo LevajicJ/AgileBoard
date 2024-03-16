@@ -1,0 +1,314 @@
+﻿@page "/Board/{id:int}"
+@using AgileBoard.Application.DTOs;
+@using AgileBoard.UI.Services;
+@using AgileBoard.Domain.Models;
+@attribute [Authorize]
+@inject IBoardService BoardService;
+@inject IUserService UserService;
+@inject ISyncLocalStorageService LocalStorage;
+
+@if(board == null && dataLoaded == false)
+{
+    <h3>Loading...</h3>
+}
+else
+{
+    <h3>@board.Name</h3>
+    <div>
+        
+        @if(manager == "manager@agileboard.com")
+        {
+            <button class="btn btn-primary" @onclick="AddUsersToBoard">Manage board users</button>
+            <button class="btn btn-primary" @onclick="OpenCreateCardDetails">Create card</button>
+        }
+        
+    </div>
+    <div class="board">
+        <div class="lists">
+            @if(columnsAndCards != null)
+            {
+                @foreach (var column in columnsAndCards)
+                {
+                    <div class="list">
+                        <div class="list-header">
+                            <span>
+                                @column.Column
+                            </span>
+                        </div>
+                        
+                        <Dropzone Items="column.Cards" OnItemDrop="((Card droppedCard) => HandleTaskDrop(droppedCard, column.ColumnId))">
+                                <ChildContent>
+                                    <div class="card" @onclick="() => ShowCardDetailsOverlay(context)">
+                                        <div class="card-body">
+                                            <h6 style="font-weight: bold">@context.Name</h6>
+                                            <p>@context.AssignedUser</p>
+                                        </div>
+                                    </div>
+                                </ChildContent>
+                            </Dropzone>
+
+
+                </div>
+            }
+        }
+
+        
+    </div>
+</div>
+}
+
+@if (showCardDetailsBool)
+{
+    <div class="overlay">
+        <div class="card-details">
+            <div style="display: flex; justify-content: space-between;">
+                <h3>@selectedCard.Name</h3>
+                @if (manager == "manager@agileboard.com")
+                {
+                    <button class="btn btn-outline-primary" @onclick="() => DeleteCard(selectedCard.Id)">Delete card</button>
+                }
+                
+            </div>
+            
+            <p><strong>Description: </strong>@selectedCard.Description</p>
+            <p><strong>Users: </strong>@selectedCard.AssignedUser</p>
+
+            
+            @if(manager != "admin@agileboard.com")
+            {
+                <p>Add comment:</p>
+                <div class="form-group">
+                    <textarea class="form-control" placeholder="Enter your comment" style="width:400px; height:100px" @bind="newComment"></textarea>
+                    <br/>
+                    <button class="btn btn-primary" @onclick="AddComment">Add Comment</button><br/>
+                    <br />
+                </div>
+            }
+            
+
+            <p><strong>Comments: </strong></p>
+            @if(selectedCard.Comments != null)
+            {
+                <ul>
+                    @foreach(var comment in selectedCard.Comments)
+                    {
+                        <li>@comment.User.Email : @comment.CommentText</li>
+                    }
+                </ul>
+            }
+
+            <button class="btn btn-outline-primary" @onclick="CloseCardDetails">Close</button>
+        </div>
+    </div>
+}
+
+@if (addUsers)
+{
+    <div class="overlay">
+        <div class="card-details">
+            <h3>Manage users</h3>
+            <select class="form-control" @bind="selectedUserId">
+                <p>Select user:</p>
+                @foreach(var user in users)
+                {
+                    <option value="@user.Id">@user.Email</option>
+                }
+            </select>
+            <br/>
+            <button class="btn btn-primary" @onclick="AssignUserToBoard">Assign user</button>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var boardUser in board.BoardUsers)
+                    {
+                        <tr>
+                            <td>@boardUser.User.Email</td>
+
+                            <td>
+                                <button class="btn btn-outline-primary" @onclick="() => DeleteUser(boardUser.UserId)">Remove user</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <button class="btn btn-primary" @onclick="CloseCardDetails">Close</button>
+        </div>
+    </div>
+}
+
+@if (createCard == true)
+{
+    <div class="overlay">
+        <div class="card-details">
+            <h4>Create a new card</h4>
+            <div class="form-group">
+                <label for="cardName">Name: </label>
+                <input id="cardName" class="form-control" @bind="newCard.Name"/>
+            </div>
+            <div class="form-group">
+                <label for="cardDescription">Description: </label>
+                <textarea class="form-control" placeholder="Enter description" style="width:400px; height:100px" @bind="newCard.Description"></textarea>
+            </div>
+            <br />
+            <select class="form-control" @bind="newCard.AssignedUser">
+                <p>Select user:</p>
+                @foreach (var user in users)
+                {
+                    <option value="@user.Email">@user.Email</option>
+                }
+            </select>
+            <br />
+            @assignUsersToCard
+            <br />
+            <button class="btn btn-primary" @onclick="AddUserToCard">Assign user</button>
+            <br />
+            <br />
+            <button class="btn btn-primary" @onclick="CreateCard">Create card</button>
+            <button class="btn btn-primary" @onclick="CloseCardDetails">Close</button>
+        </div>
+    </div>
+}
+
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+    public bool dataLoaded { get; set; }
+    public AgileBoard.Domain.Models.Board board;
+    private List<ColumnWithCards> columnsAndCards { get; set; }
+    private bool showCardDetailsBool { get; set; }
+    private Card selectedCard;
+    private string newComment = "";
+    private int userId;
+    private bool addUsers { get; set; }
+    private int selectedUserId;
+    private IEnumerable<User> users { get; set; }
+    private List<int> userIds { get; set; } = new List<int>();
+    private bool createCard { get; set; }
+    private CardDTO newCard = new CardDTO();
+    private string assignUsersToCard = "";
+    private string manager = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        manager = LocalStorage.GetItem<string>("email");
+        var boardId = Id;
+        columnsAndCards = await BoardService.GetColumnsAndCards(Id);
+        dataLoaded = true;
+
+        board = await BoardService.GetBoardById(Id);
+        users = await UserService.GetAllUsers();
+
+    }
+
+    private async void HandleTaskDrop(Card droppedCard, int targetColumn)
+    {
+        var cardId = droppedCard.Id;
+        await BoardService.ChangeCardCollumn(cardId, targetColumn);
+
+    }
+
+    private void ShowCardDetailsOverlay(Card card)
+    {
+        showCardDetailsBool = true;
+        selectedCard = card;
+    }
+
+    private void CloseCardDetails()
+    {
+        showCardDetailsBool = false;
+        selectedCard = null;
+        addUsers = false;
+        createCard = false;
+        assignUsersToCard = "";
+    }
+
+    private async void AddComment()
+    {
+        var userEmail = LocalStorage.GetItem<string>("email");
+        var userId = await UserService.GetUserByEmail(userEmail);
+        if (!string.IsNullOrWhiteSpace(newComment))
+        {
+            var comment = new CommentDTO
+                {
+                    CardId = selectedCard.Id,
+                    CommentText = newComment,
+                    UserId = userId
+                };
+
+            await BoardService.AddComment(comment);
+            columnsAndCards = await BoardService.GetColumnsAndCards(Id);
+            newComment = "";
+        }
+        showCardDetailsBool = false;
+        StateHasChanged();
+    }
+
+    public async void AddUsersToBoard()
+    {
+        addUsers = true;
+    }
+
+    private async void AssignUserToBoard()
+    {
+        userIds.Add(selectedUserId);
+        var boardUserDto = new BoardUserDTO {
+                BoardId = Id,
+                UserIds = userIds
+            };
+        await BoardService.AddUserToBoard(boardUserDto);
+        board = await BoardService.GetBoardById(Id);
+        userIds.Clear();
+        selectedUserId = 0;
+        addUsers = false;
+        StateHasChanged();
+    }
+
+    private async void OpenCreateCardDetails()
+    {
+        createCard = true;
+    }
+
+    private void AddUserToCard()
+    {
+        if(assignUsersToCard == "")
+            assignUsersToCard += $"{newCard.AssignedUser}";
+
+        else
+            assignUsersToCard += $", {newCard.AssignedUser}";
+    }
+
+    private async void CreateCard()
+    {
+        newCard.ColumnId = await BoardService.GetColumnIdForBoardByColumnName(Id, "ToDo");
+        newCard.AssignedUser = assignUsersToCard;
+        await BoardService.CreateCard(newCard);
+        columnsAndCards = await BoardService.GetColumnsAndCards(Id);
+        createCard = false;
+        StateHasChanged();
+        newCard = new CardDTO();
+        assignUsersToCard = "";
+    }
+
+    private async void DeleteCard(int cardId)
+    {
+        await BoardService.DeleteCard(cardId);
+        columnsAndCards = await BoardService.GetColumnsAndCards(Id);
+        showCardDetailsBool = false;
+        StateHasChanged();
+    }
+
+    private async void DeleteUser(int userId)
+    {
+        await BoardService.DeleteUserFromBoard(Id, userId);
+        board = await BoardService.GetBoardById(Id);
+        addUsers = false;
+        StateHasChanged();
+    }
+}
